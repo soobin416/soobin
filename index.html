@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>암석 분류기</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        #webcam-container {
+            width: 320px;
+            height: 240px;
+            margin-bottom: 20px;
+        }
+        #label-container {
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        #status {
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        #start-button {
+            margin-bottom: 20px;
+            padding: 10px 20px;
+        }
+    </style>
+</head>
+<body>
+    <div>암석 분류기</div>
+    <button id="start-button">시작하기</button>
+    <div id="webcam-container"></div>
+    <div id="label-container"></div>
+    <div id="status"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script>
+        const URL = "https://teachablemachine.withgoogle.com/models/qLzd5sNmA/";
+        let model, webcam, labelContainer, maxPredictions;
+        let speechSynthesis = window.speechSynthesis;
+
+        const startButton = document.getElementById('start-button');
+        startButton.addEventListener('click', async function() {
+            // 첫 클릭 시 음성 및 웹캠 초기화
+            const testUtterance = new SpeechSynthesisUtterance('암석 분류기를 시작합니다');
+            testUtterance.lang = 'ko-KR';
+            speechSynthesis.speak(testUtterance);
+
+            // 웹캠 초기화
+            await init();
+            
+            // 버튼 숨기기
+            startButton.style.display = 'none';
+        });
+
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            const flip = true;
+            webcam = new tmImage.Webcam(320, 240, flip);
+            await webcam.setup();
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+            labelContainer = document.getElementById("label-container");
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+        }
+
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction =
+                    prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+                labelContainer.childNodes[i].innerHTML = classPrediction;
+            }
+
+            const maxClass = prediction.reduce((prev, current) => 
+                (prev.probability > current.probability) ? prev : current
+            );
+
+            const statusDiv = document.getElementById("status");
+            if (maxClass.className === "현무암") {
+                statusDiv.innerHTML = "그건 현무암이야!";
+                speakMessage("그건 현무암이야!");
+            } else if (maxClass.className === "화강암") {
+                statusDiv.innerHTML = "그건 화강암이야!";
+                speakMessage("그건 화강암이야!");
+            }
+        }
+
+        function speakMessage(message) {
+            // 기존 음성 중지
+            speechSynthesis.cancel();
+            
+            const utterance = new SpeechSynthesisUtterance(message);
+            utterance.lang = 'ko-KR';
+            utterance.volume = 1.0;
+            utterance.rate = 1.0;
+            
+            utterance.onerror = function(event) {
+                console.error('Speech synthesis error', event);
+            };
+            
+            speechSynthesis.speak(utterance);
+        }
+    </script>
+</body>
+</html>
